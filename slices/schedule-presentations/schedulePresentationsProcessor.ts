@@ -110,7 +110,14 @@ export class SchedulePresentationsProcessor {
       new Set(
         events
           .filter((event) => event.eventType === ATTENDEE_REGISTERED_EVENT_TYPE)
-          .flatMap((event) => this.readIdField(event.payload, "attendeeRegisteredId")),
+          .flatMap((event) => {
+            const attendeeId = this.readIdField(
+              event.payload,
+              "attendeeRegisteredId",
+            );
+
+            return attendeeId ? [attendeeId] : [];
+          }),
       ),
     ).sort();
     const presentations = events
