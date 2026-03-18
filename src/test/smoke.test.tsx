@@ -7,7 +7,7 @@ describe("App shell", () => {
 
     expect(
       screen.getByRole("heading", {
-        name: "Klick-Dummy fuer Veranstalter, Referenten und Teilnehmer",
+        name: "Klick-Dummy fuer Bereich, Request, Eingabe und Ausgabe",
       }),
     ).toBeInTheDocument();
     expect(
