@@ -43,8 +43,16 @@ describe("GetAllAttendeesProcessor", () => {
 
     expect(result).toEqual({
       attendees: [
-        { name: "Ada Lovelace", email: "ada@example.com" },
-        { name: "Alan Turing", email: "alan@example.com" },
+        {
+          attendeeRegisteredId: "evt-1",
+          name: "Ada Lovelace",
+          email: "ada@example.com",
+        },
+        {
+          attendeeRegisteredId: "evt-2",
+          name: "Alan Turing",
+          email: "alan@example.com",
+        },
       ],
     });
   });
@@ -74,7 +82,13 @@ describe("GetAllAttendeesProcessor", () => {
     const result = await processor.process(emptyQuery);
 
     expect(result).toEqual({
-      attendees: [{ name: "Grace Hopper", email: "grace@example.com" }],
+      attendees: [
+        {
+          attendeeRegisteredId: "evt-3",
+          name: "Grace Hopper",
+          email: "grace@example.com",
+        },
+      ],
     });
   });
 
@@ -113,9 +127,21 @@ describe("GetAllAttendeesProcessor", () => {
 
     expect(result).toEqual({
       attendees: [
-        { name: "Adam Aster", email: "adam@example.com" },
-        { name: "Mia Moore", email: "mia@example.com" },
-        { name: "Zoe Zeta", email: "zoe@example.com" },
+        {
+          attendeeRegisteredId: "evt-5",
+          name: "Adam Aster",
+          email: "adam@example.com",
+        },
+        {
+          attendeeRegisteredId: "evt-6",
+          name: "Mia Moore",
+          email: "mia@example.com",
+        },
+        {
+          attendeeRegisteredId: "evt-4",
+          name: "Zoe Zeta",
+          email: "zoe@example.com",
+        },
       ],
     });
   });

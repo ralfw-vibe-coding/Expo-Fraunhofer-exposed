@@ -3,6 +3,7 @@ import { createFilter, type EventRecord, type EventStore } from "@ricofritzsche/
 export type GetAllAttendeesQuery = Record<string, never>;
 
 export type AttendeeListItem = {
+	attendeeRegisteredId: string;
 	name: string;
 	email: string;
 };
@@ -42,14 +43,19 @@ export class GetAllAttendeesProcessor {
 	}
 
 	private toAttendeeListItem(payload: Record<string, unknown>): AttendeeListItem | null {
+		const attendeeRegisteredId = payload["attendeeRegisteredId"];
 		const name = payload["name"];
 		const email = payload["email"];
 
-		if (typeof name !== "string" || typeof email !== "string") {
+		if (
+			typeof attendeeRegisteredId !== "string" ||
+			typeof name !== "string" ||
+			typeof email !== "string"
+		) {
 			return null;
 		}
 
-		return { name, email };
+		return { attendeeRegisteredId, name, email };
 	}
 
 	private projectResultModel(attendees: AttendeeListItem[]): GetAllAttendeesResponse {

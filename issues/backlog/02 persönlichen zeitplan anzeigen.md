@@ -1,0 +1,1 @@
+Im Bereich der Teilnehmer eine Liste der Teilnehmer anzeigen und nach Auswahl eines Teilnehmers dessen Zeitplan zeigen. Du weißt, wie der aussehen soll. Den hast du schon schön dargestellt.
