@@ -28,6 +28,7 @@ import {
 } from "../slices/register-attendees/registerAttendeesProcessor";
 import {
   SchedulePresentationsProcessor,
+  PRESENTATIONS_SCHEDULED_EVENT_TYPE,
   type SchedulePresentationsCommand,
 } from "../slices/schedule-presentations/schedulePresentationsProcessor";
 import {
@@ -143,6 +144,14 @@ const server = http.createServer(async (request, response) => {
       return;
     }
 
+    if (
+      request.method === "GET" &&
+      url.pathname === "/api/slices/schedule-presentations/latest"
+    ) {
+      sendJson(response, 200, { schedule: await loadLatestScheduleSnapshot() });
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/slices/get-my-timeline") {
       const attendeeId = url.searchParams.get("attendeeId") ?? "";
       const processor = new GetMyTimelineQueryProcessor(await eventStorePromise);
@@ -217,5 +226,65 @@ async function loadLatestExpoSnapshot(): Promise<ExpoSnapshot | null> {
     presentationSubmissionDeadline: payload.presentationSubmissionDeadline ?? "",
     prefSubmissionDeadline: payload.prefSubmissionDeadline ?? "",
     days: payload.days ?? [],
+  };
+}
+
+async function loadLatestScheduleSnapshot(): Promise<{
+  presentationsScheduledId: string;
+  schedule: {
+    slots: Array<{
+      from: string;
+      until: string;
+      tracks: Array<{
+        roomName: string;
+        presentation: string;
+        presenter: string;
+        attendees: string[];
+      }>;
+    }>;
+  };
+} | null> {
+  const eventStore = await eventStorePromise;
+  const result = await eventStore.query();
+  const latestScheduleEvent = [...result.events]
+    .reverse()
+    .find((event) => event.eventType === PRESENTATIONS_SCHEDULED_EVENT_TYPE);
+
+  if (!latestScheduleEvent) {
+    return null;
+  }
+
+  const payload = latestScheduleEvent.payload as {
+    presentationsScheduledId?: string;
+    schedule?: {
+      slots?: Array<{
+        from?: string;
+        until?: string;
+        tracks?: Array<{
+          roomName?: string;
+          presentation?: string;
+          presenter?: string;
+          attendees?: string[];
+        }>;
+      }>;
+    };
+  };
+
+  return {
+    presentationsScheduledId: payload.presentationsScheduledId ?? "",
+    schedule: {
+      slots:
+        payload.schedule?.slots?.map((slot) => ({
+          from: slot.from ?? "",
+          until: slot.until ?? "",
+          tracks:
+            slot.tracks?.map((track) => ({
+              roomName: track.roomName ?? "",
+              presentation: track.presentation ?? "",
+              presenter: track.presenter ?? "",
+              attendees: Array.isArray(track.attendees) ? track.attendees : [],
+            })) ?? [],
+        })) ?? [],
+    },
   };
 }

@@ -111,10 +111,9 @@ export class SchedulePresentationsProcessor {
         events
           .filter((event) => event.eventType === ATTENDEE_REGISTERED_EVENT_TYPE)
           .flatMap((event) => {
-            const attendeeId = this.readIdField(
-              event.payload,
-              "attendeeRegisteredId",
-            );
+            const attendeeId =
+              this.readIdField(event.payload, "attendeeId") ??
+              this.readIdField(event.payload, "attendeeRegisteredId");
 
             return attendeeId ? [attendeeId] : [];
           }),
@@ -123,10 +122,9 @@ export class SchedulePresentationsProcessor {
     const presentations = events
       .filter((event) => event.eventType === PRESENTATION_SUBMITTED_EVENT_TYPE)
       .flatMap((event) => {
-        const presentationId = this.readIdField(
-          event.payload,
-          "presentationSubmittedId",
-        );
+        const presentationId =
+          this.readIdField(event.payload, "presentationId") ??
+          this.readIdField(event.payload, "presentationSubmittedId");
 
         if (!presentationId) {
           return [];
@@ -159,11 +157,12 @@ export class SchedulePresentationsProcessor {
         continue;
       }
 
-      const attendeeId = this.readScopeId(event.payload, "attendeeRegisteredId");
-      const presentationId = this.readScopeId(
-        event.payload,
-        "presentationSubmittedId",
-      );
+      const attendeeId =
+        this.readScopeId(event.payload, "attendeeId") ??
+        this.readScopeId(event.payload, "attendeeRegisteredId");
+      const presentationId =
+        this.readScopeId(event.payload, "presentationId") ??
+        this.readScopeId(event.payload, "presentationSubmittedId");
 
       if (!attendeeId || !presentationId) {
         continue;
@@ -186,6 +185,7 @@ export class SchedulePresentationsProcessor {
     events: EventRecord[],
   ): Map<string, string[]> {
     const preferenceSubmissions = new Map<string, string>();
+    const preferencesByAttendee = new Map<string, Map<string, number>>();
 
     for (const event of events) {
       if (event.eventType !== PREFERENCES_SUBMITTED_EVENT_TYPE) {
@@ -195,16 +195,34 @@ export class SchedulePresentationsProcessor {
       const submissionId =
         this.readIdField(event.payload, "preferencesSubmittedId") ??
         this.readIdField(event.payload, "preferenceSubmittedId");
-      const attendeeId = this.readScopeId(event.payload, "attendeeRegisteredId");
+      const attendeeId =
+        this.readIdField(event.payload, "attendeeId") ??
+        this.readScopeId(event.payload, "attendeeId") ??
+        this.readScopeId(event.payload, "attendeeRegisteredId");
 
       if (!submissionId || !attendeeId) {
         continue;
       }
 
       preferenceSubmissions.set(submissionId, attendeeId);
-    }
 
-    const preferencesByAttendee = new Map<string, Map<string, number>>();
+      const directPresentationIds = this.readIdArray(event.payload, "presentationIds");
+      if (directPresentationIds.length > 0) {
+        const attendeePreferences =
+          preferencesByAttendee.get(attendeeId) ?? new Map<string, number>();
+
+        for (const [index, presentationId] of directPresentationIds.entries()) {
+          const rank = index + 1;
+          const knownRank = attendeePreferences.get(presentationId);
+
+          if (knownRank === undefined || rank < knownRank) {
+            attendeePreferences.set(presentationId, rank);
+          }
+        }
+
+        preferencesByAttendee.set(attendeeId, attendeePreferences);
+      }
+    }
 
     for (const event of events) {
       if (event.eventType !== PRESENTATION_PREFERENCE_ASSIGNED_EVENT_TYPE) {
@@ -215,10 +233,13 @@ export class SchedulePresentationsProcessor {
         this.readScopeId(event.payload, "preferencesSubmittedId") ??
         this.readScopeId(event.payload, "preferenceSubmittedId");
       const attendeeId =
+        this.readScopeId(event.payload, "attendeeId") ??
         this.readScopeId(event.payload, "attendeeRegisteredId") ??
         (submissionId ? preferenceSubmissions.get(submissionId) : null);
       const presentationId =
+        this.readScopeId(event.payload, "presentationId") ??
         this.readScopeId(event.payload, "presentationSubmittedId") ??
+        this.readIdField(event.payload, "presentationId") ??
         this.readIdField(event.payload, "presentationSubmittedId") ??
         this.readIdField(event.payload, "presentation");
       const rank =
@@ -337,9 +358,21 @@ export class SchedulePresentationsProcessor {
     }
 
     const date = this.readDate(day.date);
-    const rooms = Array.isArray(day.rooms)
+    const explicitRooms = Array.isArray(day.rooms)
       ? day.rooms.filter((room): room is string => typeof room === "string")
       : [];
+    const numberTracks =
+      typeof day.numberTracks === "number" &&
+      Number.isInteger(day.numberTracks) &&
+      day.numberTracks > 0
+        ? day.numberTracks
+        : null;
+    const rooms =
+      explicitRooms.length > 0
+        ? explicitRooms
+        : numberTracks !== null
+          ? Array.from({ length: numberTracks }, (_, index) => `Track ${index + 1}`)
+          : [];
     const slotLengthInMin =
       typeof day.slotLengthInMin === "number"
         ? day.slotLengthInMin
@@ -398,6 +431,19 @@ export class SchedulePresentationsProcessor {
 
     const value = payload.scopes[scopeName];
     return typeof value === "string" && value.trim() ? value : null;
+  }
+
+  private readIdArray(
+    payload: Record<string, unknown>,
+    fieldName: string,
+  ): string[] {
+    const value = payload[fieldName];
+
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0);
   }
 
   private isOptimisticLockConflict(error: unknown): boolean {

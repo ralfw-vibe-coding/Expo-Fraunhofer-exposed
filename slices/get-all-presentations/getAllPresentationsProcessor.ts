@@ -61,8 +61,8 @@ export class GetAllPresentationsProcessor {
 		}
 
 		const presentationId = this.readRequiredString(
-			event.payload.presentationSubmittedId,
-			"presentationSubmittedId",
+			event.payload.presentationId ?? event.payload.presentationSubmittedId,
+			"presentationId",
 		);
 		const title = this.readRequiredString(event.payload.title, "title");
 		const abstract = this.readRequiredString(event.payload.abstract, "abstract");

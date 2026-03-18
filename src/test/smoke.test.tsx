@@ -23,6 +23,9 @@ describe("App shell", () => {
       screen.getByRole("button", { name: /Referenten/i }),
     ).toBeInTheDocument();
     expect(
+      screen.getAllByRole("button", { name: /Teilnehmer/i }).length,
+    ).toBeGreaterThan(0);
+    expect(
       screen.getByLabelText("Praesentationen einreichen bis"),
     ).toBeInTheDocument();
   });

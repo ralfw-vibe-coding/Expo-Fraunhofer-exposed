@@ -190,6 +190,7 @@ export class SubmitPresentationProcessor {
 				eventType: "presentationSubmitted",
 				payload: {
 					presentationSubmittedId,
+					presentationId: presentationSubmittedId,
 					title: request.title.trim(),
 					abstract: request.abstract.trim(),
 					coverImage: request.coverImage.trim(),
@@ -261,4 +262,3 @@ export class SubmitPresentationProcessor {
 		return normalized.includes("optimistic") && normalized.includes("lock");
 	}
 }
-

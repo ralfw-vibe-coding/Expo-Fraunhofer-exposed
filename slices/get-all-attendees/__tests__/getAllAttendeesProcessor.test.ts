@@ -25,6 +25,7 @@ describe("GetAllAttendeesProcessor", () => {
         eventType: "attendeeRegistered",
         payload: {
           attendeeRegisteredId: "evt-1",
+          attendeeId: "attendee-1",
           name: "Ada Lovelace",
           email: "ada@example.com",
         },
@@ -33,6 +34,7 @@ describe("GetAllAttendeesProcessor", () => {
         eventType: "attendeeRegistered",
         payload: {
           attendeeRegisteredId: "evt-2",
+          attendeeId: "attendee-2",
           name: "Alan Turing",
           email: "alan@example.com",
         },
@@ -45,11 +47,13 @@ describe("GetAllAttendeesProcessor", () => {
       attendees: [
         {
           attendeeRegisteredId: "evt-1",
+          attendeeId: "attendee-1",
           name: "Ada Lovelace",
           email: "ada@example.com",
         },
         {
           attendeeRegisteredId: "evt-2",
+          attendeeId: "attendee-2",
           name: "Alan Turing",
           email: "alan@example.com",
         },
@@ -73,6 +77,7 @@ describe("GetAllAttendeesProcessor", () => {
         eventType: "attendeeRegistered",
         payload: {
           attendeeRegisteredId: "evt-3",
+          attendeeId: "attendee-3",
           name: "Grace Hopper",
           email: "grace@example.com",
         },
@@ -85,6 +90,7 @@ describe("GetAllAttendeesProcessor", () => {
       attendees: [
         {
           attendeeRegisteredId: "evt-3",
+          attendeeId: "attendee-3",
           name: "Grace Hopper",
           email: "grace@example.com",
         },
@@ -101,6 +107,7 @@ describe("GetAllAttendeesProcessor", () => {
         eventType: "attendeeRegistered",
         payload: {
           attendeeRegisteredId: "evt-4",
+          attendeeId: "attendee-4",
           name: "Zoe Zeta",
           email: "zoe@example.com",
         },
@@ -109,6 +116,7 @@ describe("GetAllAttendeesProcessor", () => {
         eventType: "attendeeRegistered",
         payload: {
           attendeeRegisteredId: "evt-5",
+          attendeeId: "attendee-5",
           name: "Adam Aster",
           email: "adam@example.com",
         },
@@ -117,6 +125,7 @@ describe("GetAllAttendeesProcessor", () => {
         eventType: "attendeeRegistered",
         payload: {
           attendeeRegisteredId: "evt-6",
+          attendeeId: "attendee-6",
           name: "Mia Moore",
           email: "mia@example.com",
         },
@@ -129,16 +138,19 @@ describe("GetAllAttendeesProcessor", () => {
       attendees: [
         {
           attendeeRegisteredId: "evt-5",
+          attendeeId: "attendee-5",
           name: "Adam Aster",
           email: "adam@example.com",
         },
         {
           attendeeRegisteredId: "evt-6",
+          attendeeId: "attendee-6",
           name: "Mia Moore",
           email: "mia@example.com",
         },
         {
           attendeeRegisteredId: "evt-4",
+          attendeeId: "attendee-4",
           name: "Zoe Zeta",
           email: "zoe@example.com",
         },

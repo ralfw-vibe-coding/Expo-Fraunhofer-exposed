@@ -4,6 +4,7 @@ export type GetAllAttendeesQuery = Record<string, never>;
 
 export type AttendeeListItem = {
 	attendeeRegisteredId: string;
+	attendeeId: string;
 	name: string;
 	email: string;
 };
@@ -44,18 +45,25 @@ export class GetAllAttendeesProcessor {
 
 	private toAttendeeListItem(payload: Record<string, unknown>): AttendeeListItem | null {
 		const attendeeRegisteredId = payload["attendeeRegisteredId"];
+		const attendeeId = payload["attendeeId"];
 		const name = payload["name"];
 		const email = payload["email"];
 
 		if (
 			typeof attendeeRegisteredId !== "string" ||
+			(typeof attendeeId !== "string" && typeof attendeeRegisteredId !== "string") ||
 			typeof name !== "string" ||
 			typeof email !== "string"
 		) {
 			return null;
 		}
 
-		return { attendeeRegisteredId, name, email };
+		return {
+			attendeeRegisteredId,
+			attendeeId: typeof attendeeId === "string" ? attendeeId : attendeeRegisteredId,
+			name,
+			email,
+		};
 	}
 
 	private projectResultModel(attendees: AttendeeListItem[]): GetAllAttendeesResponse {

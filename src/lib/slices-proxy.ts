@@ -45,6 +45,24 @@ export type LatestExpoResponse = {
   } | null;
 };
 
+export type LatestScheduleResponse = {
+  schedule: {
+    presentationsScheduledId: string;
+    schedule: {
+      slots: Array<{
+        from: string;
+        until: string;
+        tracks: Array<{
+          roomName: string;
+          presentation: string;
+          presenter: string;
+          attendees: string[];
+        }>;
+      }>;
+    };
+  } | null;
+};
+
 async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
   const response = await fetch(input, {
     headers: {
@@ -121,6 +139,10 @@ export const slicesProxy = {
         body: JSON.stringify(command),
       },
     );
+  },
+
+  getLatestSchedule() {
+    return fetchJson<LatestScheduleResponse>("/api/slices/schedule-presentations/latest");
   },
 
   getMyTimeline(query: GetMyTimelineQuery) {

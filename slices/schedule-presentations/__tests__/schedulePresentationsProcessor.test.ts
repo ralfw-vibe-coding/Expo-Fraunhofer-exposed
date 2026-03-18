@@ -227,6 +227,76 @@ describe("SchedulePresentationsProcessor", () => {
         "Es gibt nicht genug Slots, um jede Presentation mindestens einmal einzuplanen.",
     });
   });
+
+  it("accepts expo days that only provide numberTracks like the create-expo slice", async () => {
+    const eventStore = new MemoryEventStore();
+    const processor = new SchedulePresentationsProcessor(eventStore, () => 0);
+
+    await eventStore.append([
+      {
+        eventType: EXPO_CREATED_EVENT_TYPE,
+        payload: {
+          expoCreatedId: "expo-created-1",
+          days: [
+            {
+              date: "2026-06-05T00:00:00.000Z",
+              numberTracks: 2,
+              slotLengthMin: 60,
+              slotStartingTimes: ["2026-06-05T09:00:00.000Z"],
+            },
+          ],
+          presentationSubmissionDeadline: "2026-06-01T12:00:00.000Z",
+          prefSubmissionDeadline: "2026-06-02T12:00:00.000Z",
+        },
+      },
+      {
+        eventType: ATTENDEE_REGISTERED_EVENT_TYPE,
+        payload: {
+          attendeeRegisteredId: "attendee-1",
+          attendeeId: "attendee-1",
+          name: "Ada",
+          email: "ada@example.com",
+        },
+      },
+      {
+        eventType: ATTENDEE_REGISTERED_EVENT_TYPE,
+        payload: {
+          attendeeRegisteredId: "attendee-2",
+          attendeeId: "attendee-2",
+          name: "Grace",
+          email: "grace@example.com",
+        },
+      },
+      {
+        eventType: PRESENTATION_SUBMITTED_EVENT_TYPE,
+        payload: {
+          presentationSubmittedId: "presentation-1",
+          title: "Domain Events",
+        },
+      },
+      {
+        eventType: PRESENTER_ASSIGNED_EVENT_TYPE,
+        payload: {
+          presenterAssignedId: "presenter-assigned-1",
+          scopes: {
+            attendeeRegisteredId: "attendee-1",
+            presentationSubmittedId: "presentation-1",
+          },
+        },
+      },
+    ]);
+
+    const response = await processor.process();
+
+    expect(response.status).toBe(true);
+
+    if (!response.status) {
+      throw new Error("expected a generated schedule");
+    }
+
+    expect(response.schedule.slots).toHaveLength(1);
+    expect(response.schedule.slots[0]?.tracks[0]?.roomName).toBe("Track 1");
+  });
 });
 
 type ExpoDaySeed = {

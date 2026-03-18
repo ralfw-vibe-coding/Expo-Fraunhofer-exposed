@@ -1,0 +1,3 @@
+Im Bereich der Teilnehmer eine Liste der Teilnehmer anzeigen und nach Auswahl eines Teilnehmers dessen Zeitplan zeigen. Du weißt, wie der aussehen soll. Den hast du schon schön dargestellt.
+---
+Umgesetzt wurde im Teilnehmer-Bereich eine Request-Auswahl mit `Praeferenzen einreichen` und `Mein Zeitplan`. Fuer `Mein Zeitplan` gibt es jetzt links die filterbare Teilnehmerliste und rechts die echte Timeline-Ansicht des ausgewaehlten Teilnehmers mit chronologischen Sessions, Zustandsfarben und wandernder Jetzt-Linie. Zusaetzlich wurde das `get-my-timeline`-Slice auf das aktuelle Scheduling-Format mit `schedule.slots` erweitert und rueckwaertskompatibel zu aelteren Testdaten gehalten. Verifiziert mit `npm test` und `npm run build`.

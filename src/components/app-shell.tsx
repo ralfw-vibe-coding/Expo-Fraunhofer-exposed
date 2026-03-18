@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { perspectives, type PerspectiveId } from "@/lib/mock-data";
 import { slicesProxy } from "@/lib/slices-proxy";
 import { cn } from "@/lib/utils";
@@ -16,6 +16,8 @@ type OrganizerRequestId =
   | "create-expo"
   | "register-attendees"
   | "schedule-presentations";
+
+type AttendeeRequestId = "submit-preferences" | "get-my-timeline";
 
 type SlotDraft = {
   id: string;
@@ -57,6 +59,7 @@ type ExpoDayViewModel = {
 
 type AttendeeViewModel = {
   attendeeRegisteredId: string;
+  attendeeId: string;
   name: string;
   email: string;
 };
@@ -79,11 +82,35 @@ type SubmitPresentationResultState = {
   presentationSubmittedId?: string;
 };
 
+type SubmitPreferencesResultState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  preferencesSubmittedId?: string;
+};
+
+type SchedulePresentationsResultState = {
+  status: "idle" | "success" | "error";
+  message: string;
+  presentationsScheduledId?: string;
+};
+
 type LatestExpoViewModel = {
   expoCreatedId: string;
   presentationSubmissionDeadline: string;
   prefSubmissionDeadline: string;
   days: ExpoDayViewModel[];
+};
+
+type TimelineSessionViewModel = {
+  presentationId: string;
+  title: string;
+  abstract: string;
+  roomName: string;
+  presenterId: string;
+  presenterName: string;
+  attendeeIds: string[];
+  startTime: string;
+  endTime: string;
 };
 
 const organizerRequests: Array<{
@@ -107,16 +134,48 @@ const organizerRequests: Array<{
   {
     id: "schedule-presentations",
     label: "Schedule generieren lassen",
-    summary: "Wird danach an das Scheduling-Slice angeschlossen.",
-    available: false,
+    summary: "Generiert aus Expo, Einreichungen und Praeferenzen den aktuellen Plan.",
+    available: true,
   },
 ];
 
+const attendeeRequests: Array<{
+  id: AttendeeRequestId;
+  label: string;
+  summary: string;
+}> = [
+  {
+    id: "submit-preferences",
+    label: "Praeferenzen einreichen",
+    summary: "Vortraege auswaehlen, sortieren und an das Slice senden.",
+  },
+  {
+    id: "get-my-timeline",
+    label: "Mein Zeitplan",
+    summary: "Teilnehmer auswaehlen und den persoenlichen Zeitplan anzeigen.",
+  },
+];
+
+const ACTIVE_PERSPECTIVE_STORAGE_KEY = "expo-ui.active-perspective";
+const ACTIVE_ORGANIZER_REQUEST_STORAGE_KEY = "expo-ui.active-organizer-request";
+
 export function AppShell() {
-  const [activePerspective, setActivePerspective] =
-    useState<PerspectiveId>("organizer");
+  const [activePerspective, setActivePerspective] = useState<PerspectiveId>(() =>
+    readStoredPerspective(),
+  );
   const [activeOrganizerRequest, setActiveOrganizerRequest] =
-    useState<OrganizerRequestId>("create-expo");
+    useState<OrganizerRequestId>(() => readStoredOrganizerRequest());
+
+  useEffect(() => {
+    window.localStorage.setItem(ACTIVE_PERSPECTIVE_STORAGE_KEY, activePerspective);
+  }, [activePerspective]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      ACTIVE_ORGANIZER_REQUEST_STORAGE_KEY,
+      activeOrganizerRequest,
+    );
+  }, [activeOrganizerRequest]);
 
   const perspective = perspectives.find(
     (entry) => entry.id === activePerspective,
@@ -174,6 +233,8 @@ export function AppShell() {
             />
           ) : activePerspective === "speaker" ? (
             <SpeakerArea />
+          ) : activePerspective === "attendee" ? (
+            <AttendeeArea />
           ) : (
             <AreaPlaceholder perspective={perspective} />
           )}
@@ -232,6 +293,8 @@ function OrganizerArea({
           <CreateExpoWorkspace />
         ) : activeRequest === "register-attendees" ? (
           <RegisterAttendeesWorkspace />
+        ) : activeRequest === "schedule-presentations" ? (
+          <SchedulePresentationsWorkspace />
         ) : (
           <RequestPlaceholder requestId={activeRequest} />
         )}
@@ -543,6 +606,637 @@ function SpeakerArea() {
         </div>
       </div>
     </section>
+  );
+}
+
+function AttendeeArea() {
+  const [activeRequest, setActiveRequest] =
+    useState<AttendeeRequestId>("submit-preferences");
+
+  return (
+    <section className="rounded-[2rem] border border-slate-200 bg-white/85 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.08)] backdrop-blur sm:p-6">
+      <div className="space-y-3 border-b border-slate-200 pb-5">
+        <Badge tone="green">Teilnehmer</Badge>
+        <div className="space-y-2">
+          <h2 className="text-3xl font-semibold tracking-tight">Requests fuer Teilnehmer</h2>
+          <p className="max-w-3xl text-sm text-slate-600 sm:text-base">
+            Teilnehmer koennen ihre Praeferenzen abgeben oder nach Auswahl des eigenen
+            Namens direkt den persoenlichen Zeitplan ansehen.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-6 flex gap-3 overflow-x-auto pb-2">
+        {attendeeRequests.map((request) => (
+          <button
+            key={request.id}
+            type="button"
+            onClick={() => setActiveRequest(request.id)}
+            className={cn(
+              "min-w-[18rem] rounded-[1.5rem] border px-4 py-4 text-left transition",
+              activeRequest === request.id
+                ? "border-emerald-300 bg-emerald-50"
+                : "border-slate-200 bg-slate-50 hover:bg-white",
+            )}
+          >
+            <p className="text-sm font-semibold text-slate-950">{request.label}</p>
+            <p className="mt-2 text-sm text-slate-600">{request.summary}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-6">
+        {activeRequest === "submit-preferences" ? (
+          <SubmitPreferencesWorkspace />
+        ) : (
+          <TimelineWorkspace />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function SubmitPreferencesWorkspace() {
+  const [attendees, setAttendees] = useState<AttendeeViewModel[]>([]);
+  const [presentations, setPresentations] = useState<PresentationViewModel[]>([]);
+  const [attendeeFilter, setAttendeeFilter] = useState("");
+  const [selectedAttendeeKey, setSelectedAttendeeKey] = useState<string | null>(null);
+  const [selectedPresentationIds, setSelectedPresentationIds] = useState<string[]>([]);
+  const [result, setResult] = useState<SubmitPreferencesResultState>({
+    status: "idle",
+    message:
+      "Noch nicht abgeschickt. Wähle zuerst dich selbst aus, übernimm dann Vorträge in deine Präferenzliste und bringe sie in Reihenfolge.",
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    void Promise.all([
+      slicesProxy.getAllAttendees(),
+      slicesProxy.getAllPresentations(),
+    ])
+      .then(([attendeesResponse, presentationsResponse]) => {
+        setAttendees(attendeesResponse.attendees);
+        setPresentations(presentationsResponse.presentations);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const filteredAttendees = useMemo(() => {
+    const normalizedFilter = attendeeFilter.trim().toLowerCase();
+
+    if (!normalizedFilter) {
+      return attendees;
+    }
+
+    return attendees.filter((attendee) =>
+      attendee.name.toLowerCase().includes(normalizedFilter),
+    );
+  }, [attendees, attendeeFilter]);
+
+  const selectedAttendee =
+    attendees.find(
+      (attendee) => getAttendeeSelectionKey(attendee) === selectedAttendeeKey,
+    ) ?? null;
+
+  const availablePresentations = presentations.filter(
+    (presentation) => !selectedPresentationIds.includes(presentation.presentationId),
+  );
+
+  const rankedPresentations = selectedPresentationIds
+    .map((presentationId) =>
+      presentations.find((presentation) => presentation.presentationId === presentationId),
+    )
+    .filter((presentation): presentation is PresentationViewModel => presentation !== undefined);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!selectedAttendee) {
+      setResult({
+        status: "error",
+        message: "Bitte wähle zuerst dich selbst aus der Teilnehmerliste aus.",
+      });
+      return;
+    }
+
+    const attendeeId = getAttendeeServerId(selectedAttendee);
+
+    if (!attendeeId) {
+      setResult({
+        status: "error",
+        message:
+          "Der ausgewählte Teilnehmer hat keine gültige Teilnehmer-ID. Bitte die Liste neu laden.",
+      });
+      return;
+    }
+
+    if (selectedPresentationIds.length === 0) {
+      setResult({
+        status: "error",
+        message: "Bitte übernimm mindestens einen Vortrag in deine Präferenzliste.",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const response = await slicesProxy.submitPreferences({
+        attendeeId,
+        presentationIds: selectedPresentationIds,
+      });
+
+      setResult({
+        status: response.status ? "success" : "error",
+        message: response.message,
+        preferencesSubmittedId: response.preferencesSubmittedId,
+      });
+    } catch (error) {
+      setResult({
+        status: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Die Präferenzen konnten nicht gespeichert werden.",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  function addPresentation(presentationId: string) {
+    setSelectedPresentationIds((current) =>
+      current.includes(presentationId) ? current : [...current, presentationId],
+    );
+  }
+
+  function removePresentation(presentationId: string) {
+    setSelectedPresentationIds((current) =>
+      current.filter((id) => id !== presentationId),
+    );
+  }
+
+  function movePresentation(presentationId: string, direction: "up" | "down") {
+    setSelectedPresentationIds((current) => {
+      const index = current.indexOf(presentationId);
+
+      if (index === -1) {
+        return current;
+      }
+
+      const targetIndex = direction === "up" ? index - 1 : index + 1;
+
+      if (targetIndex < 0 || targetIndex >= current.length) {
+        return current;
+      }
+
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      next.splice(targetIndex, 0, item as string);
+      return next;
+    });
+  }
+
+  return (
+      <div className="grid gap-4 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card className="border-slate-200 bg-white shadow-none">
+          <CardHeader>
+            <Badge tone="green">Eingabe-Editor</Badge>
+            <CardTitle>Präferenzliste bauen</CardTitle>
+            <CardDescription>
+              Links Auswahl und Ranking, rechts die aktuelle Rückmeldung an das Slice.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form className="space-y-6" onSubmit={handleSubmit}>
+              <div className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+                <Card className="border-slate-200 bg-slate-50 shadow-none">
+                  <CardHeader className="pb-3">
+                    <Badge tone="neutral">1. Ich bin</Badge>
+                    <CardTitle>Teilnehmer suchen</CardTitle>
+                    <CardDescription>
+                      Suche nach deinem Namen und wähle genau einen Teilnehmer aus.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <Field label="Name suchen">
+                      <input
+                        type="text"
+                        value={attendeeFilter}
+                        onChange={(event) => setAttendeeFilter(event.target.value)}
+                        className={inputClassName}
+                        placeholder="z. B. Ada"
+                      />
+                    </Field>
+
+                    <div className="max-h-[20rem] space-y-3 overflow-y-auto pr-1">
+                      {filteredAttendees.length > 0 ? (
+                        filteredAttendees.map((attendee) => {
+                          const selectionKey = getAttendeeSelectionKey(attendee);
+                          const selected = selectionKey === selectedAttendeeKey;
+
+                          return (
+                            <button
+                              key={selectionKey}
+                              type="button"
+                              onClick={() => setSelectedAttendeeKey(selectionKey)}
+                              className={cn(
+                                "w-full rounded-2xl border px-4 py-3 text-left transition",
+                                selected
+                                  ? "border-emerald-300 bg-emerald-50"
+                                  : "border-slate-200 bg-white hover:bg-slate-50",
+                              )}
+                            >
+                              <p className="text-sm font-semibold text-slate-900">
+                                {attendee.name}
+                              </p>
+                              <p className="text-sm text-slate-600">{attendee.email}</p>
+                            </button>
+                          );
+                        })
+                      ) : (
+                        <p className="text-sm text-slate-600">
+                          Kein Teilnehmer passt zum aktuellen Filter.
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-slate-200 bg-slate-50 shadow-none">
+                  <CardHeader className="pb-3">
+                    <Badge tone="neutral">2. Vorträge auswählen</Badge>
+                    <CardTitle>Präsentationen übernehmen</CardTitle>
+                    <CardDescription>
+                      Übernimm nur die Vorträge, die du wirklich besuchen möchtest.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {availablePresentations.length > 0 ? (
+                      availablePresentations.map((presentation) => (
+                        <div
+                          key={presentation.presentationId}
+                          className="rounded-2xl border border-slate-200 bg-white p-4"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="text-sm font-semibold text-slate-900">
+                                {presentation.title}
+                              </p>
+                              <p className="mt-2 text-sm leading-6 text-slate-600">
+                                {presentation.abstract}
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                addPresentation(presentation.presentationId)
+                              }
+                            >
+                              Übernehmen
+                            </Button>
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-600">
+                        Keine weiteren Präsentationen verfügbar.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card className="border-slate-200 bg-slate-50 shadow-none">
+                <CardHeader className="pb-3">
+                  <Badge tone="neutral">3. Ranking</Badge>
+                  <CardTitle>Meine Präferenzliste</CardTitle>
+                  <CardDescription>
+                    Oben steht deine höchste Präferenz. Mit hoch/runter bringst du
+                    die Liste in die gewünschte Reihenfolge.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {rankedPresentations.length > 0 ? (
+                    rankedPresentations.map((presentation, index) => (
+                      <div
+                        key={presentation.presentationId}
+                        className="rounded-2xl border border-slate-200 bg-white p-4"
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="text-xs uppercase tracking-[0.18em] text-slate-500">
+                              Rang {index + 1}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">
+                              {presentation.title}
+                            </p>
+                            <p className="mt-2 text-sm leading-6 text-slate-600">
+                              {presentation.abstract}
+                            </p>
+                          </div>
+                          <div className="flex shrink-0 flex-col gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                movePresentation(presentation.presentationId, "up")
+                              }
+                            >
+                              Hoch
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() =>
+                                movePresentation(presentation.presentationId, "down")
+                              }
+                            >
+                              Runter
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              onClick={() =>
+                                removePresentation(presentation.presentationId)
+                              }
+                            >
+                              Entfernen
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-600">
+                      Noch keine Präsentationen in deiner Präferenzliste.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button size="lg" type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Präferenzen werden gespeichert..." : "Präferenzen absenden"}
+                </Button>
+                {selectedAttendee ? (
+                  <p className="text-sm text-slate-600">
+                    Ausgewählt: <span className="font-semibold text-slate-900">{selectedAttendee.name}</span>
+                  </p>
+                ) : null}
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4">
+          <Card className="border-slate-200 bg-white shadow-none">
+            <CardHeader>
+              <Badge tone="green">Ausgabe-Display</Badge>
+              <CardTitle>Rückmeldung</CardTitle>
+              <CardDescription>
+                Zeigt die Antwort des Präferenz-Slices nach dem Absenden.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <StatusPanel result={result} />
+              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  Aktuelle Reihenfolge
+                </p>
+                <div className="mt-4 space-y-3">
+                  {rankedPresentations.length > 0 ? (
+                    rankedPresentations.map((presentation, index) => (
+                      <div
+                        key={presentation.presentationId}
+                        className="rounded-2xl border border-slate-200 bg-white px-4 py-3"
+                      >
+                        <p className="text-sm font-semibold text-slate-900">
+                          {index + 1}. {presentation.title}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-slate-600">
+                      Noch kein Ranking aufgebaut.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+  );
+}
+
+function TimelineWorkspace() {
+  const [attendees, setAttendees] = useState<AttendeeViewModel[]>([]);
+  const [attendeeFilter, setAttendeeFilter] = useState("");
+  const [selectedAttendeeKey, setSelectedAttendeeKey] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<TimelineSessionViewModel[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    void slicesProxy
+      .getAllAttendees()
+      .then((response) => setAttendees(response.attendees))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      setNow(new Date());
+    }, 60_000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const filteredAttendees = useMemo(() => {
+    const normalizedFilter = attendeeFilter.trim().toLowerCase();
+
+    if (!normalizedFilter) {
+      return attendees;
+    }
+
+    return attendees.filter((attendee) =>
+      attendee.name.toLowerCase().includes(normalizedFilter),
+    );
+  }, [attendees, attendeeFilter]);
+
+  const selectedAttendee =
+    attendees.find(
+      (attendee) => getAttendeeSelectionKey(attendee) === selectedAttendeeKey,
+    ) ?? null;
+
+  useEffect(() => {
+    const attendeeId = selectedAttendee ? getAttendeeServerId(selectedAttendee) : null;
+
+    if (!attendeeId) {
+      setSessions([]);
+      setErrorMessage(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    void slicesProxy
+      .getMyTimeline({ attendeeId })
+      .then((response) => {
+        setSessions(response.sessions);
+      })
+      .catch((error) => {
+        setSessions([]);
+        setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Der Zeitplan konnte nicht geladen werden.",
+        );
+      })
+      .finally(() => setIsLoading(false));
+  }, [selectedAttendee]);
+
+  const timelineLineOffset = useMemo(() => computeTimelineLineOffset(sessions, now), [
+    sessions,
+    now,
+  ]);
+
+  return (
+    <div className="grid gap-4 xl:grid-cols-[0.82fr_1.18fr]">
+      <Card className="border-slate-200 bg-white shadow-none">
+        <CardHeader>
+          <Badge tone="green">Eingabe-Editor</Badge>
+          <CardTitle>Teilnehmer auswählen</CardTitle>
+          <CardDescription>
+            Suche in der Teilnehmerliste und wähle genau eine Person aus, um deren
+            persönlichen Zeitplan anzuzeigen.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Field label="Name suchen">
+            <input
+              type="text"
+              value={attendeeFilter}
+              onChange={(event) => setAttendeeFilter(event.target.value)}
+              className={inputClassName}
+              placeholder="z. B. Ada"
+            />
+          </Field>
+
+          <div className="max-h-[32rem] space-y-3 overflow-y-auto pr-1">
+            {filteredAttendees.length > 0 ? (
+              filteredAttendees.map((attendee) => {
+                const selectionKey = getAttendeeSelectionKey(attendee);
+                const selected = selectionKey === selectedAttendeeKey;
+
+                return (
+                  <button
+                    key={selectionKey}
+                    type="button"
+                    onClick={() => setSelectedAttendeeKey(selectionKey)}
+                    className={cn(
+                      "w-full rounded-2xl border px-4 py-3 text-left transition",
+                      selected
+                        ? "border-emerald-300 bg-emerald-50"
+                        : "border-slate-200 bg-slate-50 hover:bg-white",
+                    )}
+                  >
+                    <p className="text-sm font-semibold text-slate-900">{attendee.name}</p>
+                    <p className="text-sm text-slate-600">{attendee.email}</p>
+                  </button>
+                );
+              })
+            ) : (
+              <p className="text-sm text-slate-600">
+                Kein Teilnehmer passt zum aktuellen Filter.
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white shadow-none">
+        <CardHeader>
+          <Badge tone="green">Ausgabe-Display</Badge>
+          <CardTitle>Mein Zeitplan</CardTitle>
+          <CardDescription>
+            Chronologisch werden alle Präsentationen gezeigt, bei denen die gewählte
+            Person Referent oder Teilnehmer ist.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {selectedAttendee ? (
+            <p className="text-sm text-slate-600">
+              Ausgewählt:{" "}
+              <span className="font-semibold text-slate-900">{selectedAttendee.name}</span>
+            </p>
+          ) : (
+            <p className="text-sm text-slate-600">
+              Wähle links einen Teilnehmer aus, um dessen Zeitplan zu laden.
+            </p>
+          )}
+
+          {errorMessage ? (
+            <div className="rounded-[1.5rem] border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+              {errorMessage}
+            </div>
+          ) : null}
+
+          {isLoading ? (
+            <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              Zeitplan wird geladen...
+            </div>
+          ) : sessions.length > 0 ? (
+            <div className="grid gap-4 md:grid-cols-[5.25rem_minmax(0,1fr)]">
+              <div className="space-y-3 pt-1">
+                {sessions.map((session) => (
+                  <div
+                    key={`${session.presentationId}-${session.startTime}`}
+                    className="flex h-[92px] items-start justify-end text-sm text-slate-500"
+                  >
+                    {formatTimeLabel(session.startTime)}
+                  </div>
+                ))}
+              </div>
+
+              <div className="timeline-grid">
+                {timelineLineOffset !== null ? (
+                  <div
+                    className="pointer-events-none absolute left-0 right-0 border-t-2 border-rose-500"
+                    style={{ top: `${timelineLineOffset}px` }}
+                  />
+                ) : null}
+
+                {sessions.map((session) => {
+                  const toneClass = getTimelineToneClass(session, selectedAttendee, now);
+
+                  return (
+                    <div
+                      key={`${session.presentationId}-${session.startTime}`}
+                      className={cn("timeline-slot", toneClass)}
+                    >
+                      <p className="timeline-meta">
+                        {formatTimeLabel(session.startTime)} / {session.roomName}
+                      </p>
+                      <p className="timeline-title">{session.title}</p>
+                      <p className="timeline-speaker">{session.presenterName}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : selectedAttendee ? (
+            <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+              Für diesen Teilnehmer liegt aktuell noch kein Zeitplan vor.
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -1204,6 +1898,303 @@ function RegisterAttendeesWorkspace() {
   );
 }
 
+function SchedulePresentationsWorkspace() {
+  const [attendees, setAttendees] = useState<AttendeeViewModel[]>([]);
+  const [presentations, setPresentations] = useState<PresentationViewModel[]>([]);
+  const [result, setResult] = useState<SchedulePresentationsResultState>({
+    status: "idle",
+    message:
+      "Noch nicht ausgelöst. Sobald Expo, Teilnehmer, Präsentationen und Präferenzen vorliegen, kann der Schedule generiert werden.",
+  });
+  const [generatedSchedule, setGeneratedSchedule] = useState<{
+    slots: Array<{
+      from: string;
+      until: string;
+      tracks: Array<{
+        roomName: string;
+        presentation: string;
+        presenter: string;
+        attendees: string[];
+      }>;
+    }>;
+  } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    void Promise.all([
+      slicesProxy.getAllAttendees(),
+      slicesProxy.getAllPresentations(),
+    ])
+      .then(([attendeesResponse, presentationsResponse]) => {
+        setAttendees(attendeesResponse.attendees);
+        setPresentations(presentationsResponse.presentations);
+      })
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    void slicesProxy
+      .getLatestSchedule()
+      .then((response) => {
+        if (!response.schedule) {
+          return;
+        }
+
+        setGeneratedSchedule(normalizeScheduleSnapshot(response.schedule.schedule));
+        setResult({
+          status: "success",
+          message: "Ein bereits gespeicherter Schedule wurde geladen.",
+          presentationsScheduledId: response.schedule.presentationsScheduledId,
+        });
+      })
+      .catch(() => undefined);
+  }, []);
+
+  async function handleGenerate() {
+    setIsSubmitting(true);
+
+    try {
+      const response = await slicesProxy.schedulePresentations();
+
+      setResult({
+        status: response.status ? "success" : "error",
+        message: response.message,
+        presentationsScheduledId: response.status
+          ? response.presentationsScheduledId
+          : undefined,
+      });
+
+      setGeneratedSchedule(
+        response.status
+          ? normalizeScheduleSnapshot(response.schedule)
+          : null,
+      );
+    } catch (error) {
+      setResult({
+        status: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Der Schedule konnte nicht generiert werden.",
+      });
+      setGeneratedSchedule(null);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  const slotCount = generatedSchedule?.slots.length ?? 0;
+  const trackCount =
+    generatedSchedule?.slots.reduce((sum, slot) => sum + slot.tracks.length, 0) ?? 0;
+  const attendeeAssignments =
+    generatedSchedule?.slots.reduce(
+      (sum, slot) =>
+        sum +
+        slot.tracks.reduce((trackSum, track) => trackSum + track.attendees.length, 0),
+      0,
+    ) ?? 0;
+  const trackNames = useMemo(() => {
+    const names: string[] = [];
+
+    for (const slot of generatedSchedule?.slots ?? []) {
+      for (const track of slot.tracks) {
+        if (!names.includes(track.roomName)) {
+          names.push(track.roomName);
+        }
+      }
+    }
+
+    return names;
+  }, [generatedSchedule]);
+
+  const attendeeNameById = useMemo(
+    () =>
+      new Map(
+        attendees.map((attendee) => [
+          getAttendeeServerId(attendee) ?? attendee.attendeeRegisteredId,
+          attendee.name,
+        ]),
+      ),
+    [attendees],
+  );
+  const presentationById = useMemo(
+    () => new Map(presentations.map((presentation) => [presentation.presentationId, presentation])),
+    [presentations],
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+        <Card className="border-slate-200 bg-white shadow-none">
+          <CardHeader>
+            <Badge tone="blue">Eingabe-Editor</Badge>
+            <CardTitle>Schedule generieren lassen</CardTitle>
+            <CardDescription>
+              Dieser Request braucht keine weiteren Eingaben. Der Server nimmt den
+              aktuellen Expo-Kontext und erzeugt daraus den Schedule.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="rounded-[1.75rem] border border-slate-200 bg-slate-50 p-5">
+              <p className="text-lg font-semibold text-slate-950">Planung auslösen</p>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+                Der Button ruft das Scheduling-Slice auf. Dabei werden Expo, registrierte
+                Teilnehmer, eingereichte Präsentationen, Referenten-Zuordnungen und
+                gespeicherte Präferenzen gemeinsam ausgewertet.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center gap-3">
+                <Button size="lg" type="button" onClick={handleGenerate} disabled={isSubmitting}>
+                  {isSubmitting
+                    ? "Schedule wird generiert..."
+                    : "Schedule generieren lassen"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-[1.5rem] border border-dashed border-slate-300 bg-white p-4">
+              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                Hinweis
+              </p>
+              <p className="mt-3 text-sm text-slate-600">
+                Wenn noch notwendige Eingangsdaten fehlen oder Konflikte nicht auflösbar
+                sind, meldet das Slice den Grund direkt zurück.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-4">
+          <Card className="border-slate-200 bg-white shadow-none">
+            <CardHeader>
+              <Badge tone="green">Ausgabe-Display</Badge>
+              <CardTitle>Scheduling-Rueckmeldung</CardTitle>
+              <CardDescription>
+                Zeigt die Antwort des Scheduling-Processors und die letzte erzeugte
+                Planungszusammenfassung.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <StatusPanel result={result} />
+
+              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  Zusammenfassung
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <PreviewTile title="Zeitslots" value={String(slotCount)} />
+                  <PreviewTile title="Tracks" value={String(trackCount)} />
+                  <PreviewTile
+                    title="Zuordnungen"
+                    value={String(attendeeAssignments)}
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  Letzter generierter Schedule
+                </p>
+                <div className="mt-4 space-y-3">
+                  {generatedSchedule && generatedSchedule.slots.length > 0 ? (
+                    <p className="text-sm text-slate-600">
+                      Unten wird das Expo-Programm als Matrix aus Zeit und Tracks dargestellt.
+                    </p>
+                  ) : (
+                    <p className="text-sm text-slate-600">
+                      Noch kein Schedule generiert.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <Card className="border-slate-200 bg-white shadow-none">
+        <CardHeader>
+          <Badge tone="neutral">Expo-Programm</Badge>
+          <CardTitle>Letzter generierter Schedule als Matrix</CardTitle>
+          <CardDescription>
+            Zeit verläuft vertikal links, Tracks liegen horizontal als Spalten.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {generatedSchedule && generatedSchedule.slots.length > 0 && trackNames.length > 0 ? (
+            <div className="overflow-x-auto">
+              <div
+                className="schedule-matrix"
+                style={{
+                  gridTemplateColumns: `5.5rem repeat(${trackNames.length}, minmax(16rem, 1fr))`,
+                }}
+              >
+                <div className="schedule-matrix-corner" />
+                {trackNames.map((trackName) => (
+                  <div key={trackName} className="schedule-matrix-header">
+                    {trackName}
+                  </div>
+                ))}
+
+                {generatedSchedule.slots.map((slot) => {
+                  const tracksByRoom = new Map(
+                    slot.tracks.map((track) => [track.roomName, track]),
+                  );
+
+                  return (
+                    <Fragment key={`${slot.from}-${slot.until}`}>
+                      <div className="schedule-matrix-time">
+                        {formatTimeLabel(slot.from)}
+                      </div>
+                      {trackNames.map((trackName) => {
+                        const track = tracksByRoom.get(trackName);
+                        if (!track) {
+                          return (
+                            <div key={`${slot.from}-${trackName}`} className="schedule-matrix-cell-empty">
+                              Frei
+                            </div>
+                          );
+                        }
+
+                        const presentation =
+                          presentationById.get(track.presentation)?.title ?? track.presentation;
+                        const presenter =
+                          attendeeNameById.get(track.presenter) ?? track.presenter;
+                        const attendeeList =
+                          track.attendees
+                            .map((attendeeId) => attendeeNameById.get(attendeeId) ?? attendeeId)
+                            .join(", ") || "Keine Teilnehmer";
+
+                        return (
+                          <div
+                            key={`${slot.from}-${trackName}-${track.presentation}`}
+                            className="schedule-matrix-cell"
+                          >
+                            <p className="schedule-matrix-title">{presentation}</p>
+                            <p className="schedule-matrix-line">
+                              Referent: {presenter}
+                            </p>
+                            <p className="schedule-matrix-line">
+                              Teilnehmer: {attendeeList}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </Fragment>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-600">
+              Noch kein Schedule generiert.
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 function Field({
   label,
   children,
@@ -1225,7 +2216,9 @@ function StatusPanel({
   result:
     | CreateExpoResultState
     | RegisterAttendeesResultState
-    | SubmitPresentationResultState;
+    | SubmitPresentationResultState
+    | SubmitPreferencesResultState
+    | SchedulePresentationsResultState;
 }) {
   const tone =
     result.status === "success"
@@ -1251,6 +2244,16 @@ function StatusPanel({
       {"presentationSubmittedId" in result && result.presentationSubmittedId ? (
         <p className="mt-2 text-xs text-slate-500">
           Eingereichte `presentationSubmittedId`: {result.presentationSubmittedId}
+        </p>
+      ) : null}
+      {"preferencesSubmittedId" in result && result.preferencesSubmittedId ? (
+        <p className="mt-2 text-xs text-slate-500">
+          Gespeicherte `preferencesSubmittedId`: {result.preferencesSubmittedId}
+        </p>
+      ) : null}
+      {"presentationsScheduledId" in result && result.presentationsScheduledId ? (
+        <p className="mt-2 text-xs text-slate-500">
+          Gespeicherte `presentationsScheduledId`: {result.presentationsScheduledId}
         </p>
       ) : null}
     </div>
@@ -1615,6 +2618,10 @@ function getAttendeeSelectionKey(attendee: AttendeeViewModel) {
 }
 
 function getAttendeeServerId(attendee: AttendeeViewModel): string | null {
+  if (typeof attendee.attendeeId === "string" && attendee.attendeeId.trim().length > 0) {
+    return attendee.attendeeId;
+  }
+
   return typeof attendee.attendeeRegisteredId === "string" &&
     attendee.attendeeRegisteredId.trim().length > 0
     ? attendee.attendeeRegisteredId
@@ -1637,4 +2644,147 @@ function escapeXml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&apos;");
+}
+
+function formatDateTimeLabel(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatTimeLabel(value: string) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("de-DE", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function getTimelineToneClass(
+  session: TimelineSessionViewModel,
+  selectedAttendee: AttendeeViewModel | null,
+  now: Date,
+) {
+  const start = new Date(session.startTime);
+  const end = new Date(session.endTime);
+  const attendeeId = selectedAttendee ? getAttendeeServerId(selectedAttendee) : null;
+
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return "timeline-slot-future";
+  }
+
+  if (end.getTime() <= now.getTime()) {
+    return "timeline-slot-past";
+  }
+
+  if (attendeeId && session.presenterId === attendeeId) {
+    return "timeline-slot-speaker";
+  }
+
+  if (start.getTime() <= now.getTime() && end.getTime() > now.getTime()) {
+    return "timeline-slot-current";
+  }
+
+  return "timeline-slot-future";
+}
+
+function computeTimelineLineOffset(
+  sessions: TimelineSessionViewModel[],
+  now: Date,
+): number | null {
+  if (sessions.length === 0) {
+    return null;
+  }
+
+  const slotHeight = 92;
+  const slotGap = 12;
+
+  for (const [index, session] of sessions.entries()) {
+    const start = new Date(session.startTime);
+    const end = new Date(session.endTime);
+
+    if (
+      Number.isNaN(start.getTime()) ||
+      Number.isNaN(end.getTime()) ||
+      now.getTime() < start.getTime() ||
+      now.getTime() > end.getTime()
+    ) {
+      continue;
+    }
+
+    const duration = end.getTime() - start.getTime();
+    if (duration <= 0) {
+      return index * (slotHeight + slotGap);
+    }
+
+    const progress = (now.getTime() - start.getTime()) / duration;
+    return index * (slotHeight + slotGap) + progress * slotHeight;
+  }
+
+  return null;
+}
+
+function normalizeScheduleSnapshot(schedule: {
+  slots: Array<{
+    from: string | Date;
+    until: string | Date;
+    tracks: Array<{
+      roomName: string;
+      presentation: string;
+      presenter: string;
+      attendees: string[];
+    }>;
+  }>;
+}) {
+  return {
+    slots: schedule.slots.map((slot) => ({
+      from:
+        slot.from instanceof Date ? slot.from.toISOString() : String(slot.from),
+      until:
+        slot.until instanceof Date ? slot.until.toISOString() : String(slot.until),
+      tracks: slot.tracks.map((track) => ({
+        roomName: track.roomName,
+        presentation: track.presentation,
+        presenter: track.presenter,
+        attendees: [...track.attendees],
+      })),
+    })),
+  };
+}
+
+function readStoredPerspective(): PerspectiveId {
+  if (typeof window === "undefined") {
+    return "organizer";
+  }
+
+  const value = window.localStorage.getItem(ACTIVE_PERSPECTIVE_STORAGE_KEY);
+  return perspectives.some((entry) => entry.id === value)
+    ? (value as PerspectiveId)
+    : "organizer";
+}
+
+function readStoredOrganizerRequest(): OrganizerRequestId {
+  if (typeof window === "undefined") {
+    return "create-expo";
+  }
+
+  const value = window.localStorage.getItem(ACTIVE_ORGANIZER_REQUEST_STORAGE_KEY);
+  return organizerRequests.some((request) => request.id === value)
+    ? (value as OrganizerRequestId)
+    : "create-expo";
 }

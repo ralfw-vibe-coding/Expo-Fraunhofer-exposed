@@ -42,7 +42,6 @@ type PresentationSubmission = {
 
 type ExpoConfig = {
 	slotLengthMin: number;
-	slotStartingTimes: Date[];
 };
 
 type ScheduleTrack = {
@@ -52,9 +51,14 @@ type ScheduleTrack = {
 	attendeeIds: string[];
 };
 
-type Schedule = {
+type ScheduleSlot = {
 	from: Date | null;
+	until: Date | null;
 	tracks: ScheduleTrack[];
+};
+
+type Schedule = {
+	slots: ScheduleSlot[];
 };
 
 type TimelineContextModel = {
@@ -141,44 +145,47 @@ export class GetMyTimelineQueryProcessor {
 		request: GetMyTimelineQuery,
 		contextModel: TimelineContextModel,
 	): GetMyTimelineQueryResponse {
-		if (!contextModel.schedule || contextModel.schedule.tracks.length === 0) {
+		if (!contextModel.schedule || contextModel.schedule.slots.length === 0) {
 			return {
 				attendeeId: request.attendeeId,
 				sessions: [],
 			};
 		}
 
-		const sessions = contextModel.schedule.tracks
-			.map((track, index) => {
-				const start = this.resolveSlotStart(contextModel, index);
-				const end = this.resolveSlotEnd(contextModel, start);
-				if (!start || !end) {
-					return null;
-				}
+		const sessions = contextModel.schedule.slots
+			.flatMap((slot, index) =>
+				slot.tracks.map((track) => {
+					const start = this.resolveSlotStart(contextModel, slot, index);
+					const end = this.resolveSlotEnd(contextModel, slot, start);
+					if (!start || !end) {
+						return null;
+					}
 
-				const presentation = contextModel.presentationsById.get(track.presentationId);
-				const presenter = contextModel.attendeesById.get(track.presenterId);
-				const isResponsible =
-					track.presenterId === request.attendeeId ||
-					(presentation?.presenterIds.includes(request.attendeeId) ?? false);
-				const isRelevant = isResponsible || track.attendeeIds.includes(request.attendeeId);
+					const presentation = contextModel.presentationsById.get(track.presentationId);
+					const presenter = contextModel.attendeesById.get(track.presenterId);
+					const isResponsible =
+						track.presenterId === request.attendeeId ||
+						(presentation?.presenterIds.includes(request.attendeeId) ?? false);
+					const isRelevant =
+						isResponsible || track.attendeeIds.includes(request.attendeeId);
 
-				if (!isRelevant) {
-					return null;
-				}
+					if (!isRelevant) {
+						return null;
+					}
 
-				return {
-					presentationId: track.presentationId,
-					title: presentation?.title ?? track.presentationId,
-					abstract: presentation?.abstract ?? "",
-					roomName: track.roomName,
-					presenterId: track.presenterId,
-					presenterName: presenter?.name ?? track.presenterId,
-					attendeeIds: [...track.attendeeIds],
-					startTime: start.toISOString(),
-					endTime: end.toISOString(),
-				} as TimelineSession;
-			})
+					return {
+						presentationId: track.presentationId,
+						title: presentation?.title ?? track.presentationId,
+						abstract: presentation?.abstract ?? "",
+						roomName: track.roomName,
+						presenterId: track.presenterId,
+						presenterName: presenter?.name ?? track.presenterId,
+						attendeeIds: [...track.attendeeIds],
+						startTime: start.toISOString(),
+						endTime: end.toISOString(),
+					} as TimelineSession;
+				}),
+			)
 			.filter((session): session is TimelineSession => session !== null)
 			.sort((a, b) => a.startTime.localeCompare(b.startTime));
 
@@ -188,22 +195,38 @@ export class GetMyTimelineQueryProcessor {
 		};
 	}
 
-	private resolveSlotStart(contextModel: TimelineContextModel, index: number): Date | null {
-		const slotStart = contextModel.expo?.slotStartingTimes[index];
-		if (slotStart) {
-			return slotStart;
+	private resolveSlotStart(
+		contextModel: TimelineContextModel,
+		slot: ScheduleSlot,
+		index: number,
+	): Date | null {
+		if (slot.from) {
+			return slot.from;
 		}
 
-		if (!contextModel.expo || !contextModel.schedule?.from) {
+		if (!contextModel.expo || index === 0) {
+			return null;
+		}
+
+		const previousSlot = contextModel.schedule?.slots[index - 1];
+		if (!previousSlot?.from) {
 			return null;
 		}
 
 		return new Date(
-			contextModel.schedule.from.getTime() + index * contextModel.expo.slotLengthMin * 60_000,
+			previousSlot.from.getTime() + contextModel.expo.slotLengthMin * 60_000,
 		);
 	}
 
-	private resolveSlotEnd(contextModel: TimelineContextModel, start: Date | null): Date | null {
+	private resolveSlotEnd(
+		contextModel: TimelineContextModel,
+		slot: ScheduleSlot,
+		start: Date | null,
+	): Date | null {
+		if (slot.until) {
+			return slot.until;
+		}
+
 		if (!start || !contextModel.expo) {
 			return null;
 		}
@@ -212,8 +235,9 @@ export class GetMyTimelineQueryProcessor {
 	}
 
 	private parseExpoConfig(payload: Record<string, unknown>): ExpoConfig | null {
-		const slotLengthMin = this.readNumber(payload.slotLengthMin);
-		const slotStartingTimes = this.readDateArray(payload.slotStartingTimes);
+		const slotLengthMin =
+			this.readNumber(payload.slotLengthMin) ??
+			this.readSlotLengthFromDays(payload.days);
 
 		if (slotLengthMin === null) {
 			return null;
@@ -221,7 +245,6 @@ export class GetMyTimelineQueryProcessor {
 
 		return {
 			slotLengthMin,
-			slotStartingTimes,
 		};
 	}
 
@@ -261,6 +284,13 @@ export class GetMyTimelineQueryProcessor {
 			return null;
 		}
 
+		const slotsFromNewShape = this.parseScheduleSlots(scheduleRecord);
+		if (slotsFromNewShape.length > 0) {
+			return {
+				slots: slotsFromNewShape,
+			};
+		}
+
 		const tracksRaw = Array.isArray(scheduleRecord.tracks) ? scheduleRecord.tracks : [];
 		const tracks: ScheduleTrack[] = [];
 
@@ -288,10 +318,65 @@ export class GetMyTimelineQueryProcessor {
 			return null;
 		}
 
+		const baseFrom = this.readDate(scheduleRecord.from);
 		return {
-			from: this.readDate(scheduleRecord.from),
-			tracks,
+			slots: tracks.map((track, index) => ({
+				from: index === 0 ? baseFrom : null,
+				until: null,
+				tracks: [track],
+			})),
 		};
+	}
+
+	private parseScheduleSlots(scheduleRecord: Record<string, unknown>): ScheduleSlot[] {
+		const slotsRaw = Array.isArray(scheduleRecord.slots) ? scheduleRecord.slots : [];
+
+		return slotsRaw
+			.map((slotRaw) => {
+				const slotRecord = this.asRecord(slotRaw);
+				if (!slotRecord) {
+					return null;
+				}
+
+				const tracksRaw = Array.isArray(slotRecord.tracks) ? slotRecord.tracks : [];
+				const tracks: ScheduleTrack[] = [];
+
+				for (const trackRaw of tracksRaw) {
+					const trackRecord = this.asRecord(trackRaw);
+					if (!trackRecord) {
+						continue;
+					}
+
+					const presentationId =
+						this.readString(trackRecord.presentation) ??
+						this.readString(trackRecord.presentationId);
+					const presenterId =
+						this.readString(trackRecord.presenter) ??
+						this.readString(trackRecord.presenterId);
+
+					if (!presentationId || !presenterId) {
+						continue;
+					}
+
+					tracks.push({
+						roomName: this.readString(trackRecord.roomName) ?? "",
+						presentationId,
+						presenterId,
+						attendeeIds: this.readStringArray(trackRecord.attendees),
+					});
+				}
+
+				if (tracks.length === 0) {
+					return null;
+				}
+
+				return {
+					from: this.readDate(slotRecord.from),
+					until: this.readDate(slotRecord.until),
+					tracks,
+				} as ScheduleSlot;
+			})
+			.filter((slot): slot is ScheduleSlot => slot !== null);
 	}
 
 	private asRecord(value: unknown): Record<string, unknown> | null {
@@ -353,6 +438,28 @@ export class GetMyTimelineQueryProcessor {
 			.map((entry) => this.readDate(entry))
 			.filter((entry): entry is Date => entry !== null)
 			.sort((a, b) => a.getTime() - b.getTime());
+	}
+
+	private readSlotLengthFromDays(value: unknown): number | null {
+		if (!Array.isArray(value)) {
+			return null;
+		}
+
+		for (const day of value) {
+			const dayRecord = this.asRecord(day);
+			if (!dayRecord) {
+				continue;
+			}
+
+			const slotLengthMin =
+				this.readNumber(dayRecord.slotLengthMin) ??
+				this.readNumber(dayRecord.slotLengthInMin);
+			if (slotLengthMin !== null) {
+				return slotLengthMin;
+			}
+		}
+
+		return null;
 	}
 }
 

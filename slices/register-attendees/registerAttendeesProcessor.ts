@@ -159,14 +159,19 @@ export class RegisterAttendeesCommandProcessor {
   }
 
   private createEvents(request: RegisterAttendeesCommand): Event[] {
-    return request.attendees.map((attendee) => ({
-      eventType: ATTENDEE_REGISTERED_EVENT_TYPE,
-      payload: {
-        attendeeRegisteredId: crypto.randomUUID(),
-        name: attendee.name.trim(),
-        email: normalizeEmail(attendee.email),
-      },
-    }));
+    return request.attendees.map((attendee) => {
+      const attendeeRegisteredId = crypto.randomUUID();
+
+      return {
+        eventType: ATTENDEE_REGISTERED_EVENT_TYPE,
+        payload: {
+          attendeeRegisteredId,
+          attendeeId: attendeeRegisteredId,
+          name: attendee.name.trim(),
+          email: normalizeEmail(attendee.email),
+        },
+      };
+    });
   }
 }
 

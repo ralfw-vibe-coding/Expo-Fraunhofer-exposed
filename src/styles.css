@@ -113,3 +113,77 @@ select {
   font-size: 0.95rem;
   line-height: 1.2;
 }
+
+.schedule-matrix {
+  display: grid;
+  min-width: max-content;
+  gap: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 1.25rem;
+  overflow: hidden;
+}
+
+.schedule-matrix-corner,
+.schedule-matrix-header,
+.schedule-matrix-time,
+.schedule-matrix-cell,
+.schedule-matrix-cell-empty {
+  border-right: 1px solid #cbd5e1;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.schedule-matrix-corner {
+  background: #f8fafc;
+  min-height: 3.5rem;
+}
+
+.schedule-matrix-header {
+  background: #e2e8f0;
+  padding: 0.9rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #334155;
+}
+
+.schedule-matrix-time {
+  background: #f8fafc;
+  padding: 1rem 0.75rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.schedule-matrix-cell,
+.schedule-matrix-cell-empty {
+  min-height: 9rem;
+  padding: 1rem;
+  background: white;
+}
+
+.schedule-matrix-cell-empty {
+  color: #94a3b8;
+}
+
+.schedule-matrix-title {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #0f172a;
+}
+
+.schedule-matrix-line {
+  margin-top: 0.45rem;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: #475569;
+}
+
+.schedule-matrix > :nth-child(1n) {
+  border-right-width: 1px;
+}
+
+.schedule-matrix > :nth-last-child(-n + 1) {
+  border-bottom-width: 1px;
+}

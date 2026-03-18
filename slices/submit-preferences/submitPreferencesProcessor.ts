@@ -134,14 +134,8 @@ export class SubmitPreferencesProcessor {
 
   private buildContextQuery(request: SubmitPreferencesCommand) {
     const expoFilter = createFilter([EXPO_CREATED]);
-    const attendeeFilter = createFilter(
-      [ATTENDEE_REGISTERED],
-      [{ attendeeId: request.attendeeId }],
-    );
-    const presentationFilter = createFilter(
-      [PRESENTATION_SUBMITTED],
-      request.presentationIds.map((presentationId) => ({ presentationId })),
-    );
+    const attendeeFilter = createFilter([ATTENDEE_REGISTERED]);
+    const presentationFilter = createFilter([PRESENTATION_SUBMITTED]);
 
     return createQuery(expoFilter, attendeeFilter, presentationFilter);
   }
@@ -286,7 +280,9 @@ export class SubmitPreferencesProcessor {
   private parseAttendeeRegisteredPayload(
     payload: Record<string, unknown>,
   ): AttendeeRegisteredPayload | null {
-    const attendeeId = this.readString(payload.attendeeId);
+    const attendeeId =
+      this.readString(payload.attendeeId) ??
+      this.readString(payload.attendeeRegisteredId);
     if (!attendeeId) {
       return null;
     }
@@ -297,7 +293,9 @@ export class SubmitPreferencesProcessor {
   private parsePresentationSubmittedPayload(
     payload: Record<string, unknown>,
   ): PresentationSubmittedPayload | null {
-    const presentationId = this.readString(payload.presentationId);
+    const presentationId =
+      this.readString(payload.presentationId) ??
+      this.readString(payload.presentationSubmittedId);
     if (!presentationId) {
       return null;
     }

@@ -176,6 +176,94 @@ describe("GetMyTimelineQueryProcessor", () => {
       presenterName: "David",
     });
   });
+
+  it("reads timeline sessions from the current schedule slot format", async () => {
+    const eventStore = new MemoryEventStore();
+
+    await eventStore.append([
+      {
+        eventType: "expoCreated",
+        payload: {
+          expoCreatedId: "expo-1",
+          days: [
+            {
+              date: "2026-03-18T00:00:00.000Z",
+              numberTracks: 2,
+              slotLengthMin: 60,
+              slotStartingTimes: [
+                "2026-03-18T10:00:00.000Z",
+                "2026-03-18T11:00:00.000Z",
+              ],
+            },
+          ],
+        },
+      },
+      {
+        eventType: "attendeeRegistered",
+        payload: {
+          attendeeRegisteredId: attendeeId,
+          attendeeId,
+          name: "David",
+          email: "david@example.com",
+        },
+      },
+      {
+        eventType: "attendeeRegistered",
+        payload: {
+          attendeeRegisteredId: "attendee-2",
+          attendeeId: "attendee-2",
+          name: "Eva",
+          email: "eva@example.com",
+        },
+      },
+      {
+        eventType: "presentationSubmitted",
+        payload: {
+          presentationSubmittedId: "pres-1",
+          presentationId: "pres-1",
+          title: "Event Sourcing 101",
+          abstract: "Grundlagen",
+          presenters: ["attendee-2"],
+          coverImage: "",
+        },
+      },
+      {
+        eventType: "presentationsScheduled",
+        payload: {
+          presentationsScheduledId: "schedule-1",
+          schedule: {
+            slots: [
+              {
+                from: "2026-03-18T10:00:00.000Z",
+                until: "2026-03-18T11:00:00.000Z",
+                tracks: [
+                  {
+                    roomName: "Track 1",
+                    presentation: "pres-1",
+                    presenter: "attendee-2",
+                    attendees: [attendeeId],
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    ]);
+
+    const processor = new GetMyTimelineQueryProcessor(eventStore);
+    const response = await processor.process({ attendeeId });
+
+    expect(response.sessions).toHaveLength(1);
+    expect(response.sessions[0]).toMatchObject({
+      presentationId: "pres-1",
+      roomName: "Track 1",
+      presenterId: "attendee-2",
+      presenterName: "Eva",
+      startTime: "2026-03-18T10:00:00.000Z",
+      endTime: "2026-03-18T11:00:00.000Z",
+    });
+  });
 });
 
 type BaselineInput = {

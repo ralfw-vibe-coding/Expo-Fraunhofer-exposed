@@ -91,6 +91,47 @@ describe("SubmitPreferencesProcessor", () => {
       message: "presentationIds must be unique.",
     });
   });
+
+  it("accepts legacy attendee and presentation ids from older events", async () => {
+    const eventStore = new MemoryEventStore();
+    await eventStore.append([
+      {
+        eventType: "expoCreated",
+        payload: {
+          expoCreatedId: "expo-created-legacy",
+          prefSubmissionDeadline: "2026-03-20T12:00:00.000Z",
+        },
+      },
+      {
+        eventType: "attendeeRegistered",
+        payload: {
+          attendeeRegisteredId: "legacy-attendee-1",
+          name: "Grace Hopper",
+          email: "grace@example.com",
+        },
+      },
+      {
+        eventType: "presentationSubmitted",
+        payload: {
+          presentationSubmittedId: "legacy-presentation-1",
+          title: "Legacy talk",
+        },
+      },
+    ]);
+
+    const processor = new SubmitPreferencesProcessor(
+      eventStore,
+      () => new Date("2026-03-18T12:00:00.000Z"),
+    );
+
+    const response = await processor.process({
+      attendeeId: "legacy-attendee-1",
+      presentationIds: ["legacy-presentation-1"],
+    });
+
+    expect(response.status).toBe(true);
+    expect(response.preferencesSubmittedId).toBeDefined();
+  });
 });
 
 async function seedValidContext(
