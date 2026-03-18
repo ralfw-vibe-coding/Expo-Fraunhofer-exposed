@@ -1,0 +1,4 @@
+interface:
+  display_name: "EventStore TypeScript Coding"
+  short_description: "Write code with EventStore TypeScript"
+  default_prompt: "Use $eventstore-typescript-coding to implement or review code with @ricofritzsche/eventstore."
